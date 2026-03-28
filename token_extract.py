@@ -364,19 +364,45 @@ with SB(uc=True, headless=False, xvfb=False) as sb:
                     if not _submitted:
                         print("Submit btn not found", flush=True)
 
-                    # Poll /user/info for trial_status (same as proven trial_activate.py)
+                    # Post-submit: handle hCaptcha + watch for redirect (proven trial_activate approach)
+                    _t.sleep(3)
                     _activated = False
-                    for _pi in range(14):
-                        _t.sleep(5)
+                    for _attempt in range(5):
                         try:
-                            _pl = requests.get("https://mulerun.com/user/info",
-                                headers={"Authorization": "Bearer " + _co_jwt}, timeout=8
-                            ).json().get("data", {}).get("plan", {})
-                            _ts2 = _pl.get("trial_status", 0)
-                            _ss2 = _pl.get("subscription_status", False)
-                            print("Plan [" + str((_pi+1)*5) + "s]: trial=" + str(_ts2) + " sub=" + str(_ss2), flush=True)
-                            if _ts2 or _ss2: _activated = True; break
+                            _url_now = sb.get_current_url()
+                            if "mulerun.com" in _url_now and "checkout.stripe.com" not in _url_now:
+                                print("Redirected after attempt " + str(_attempt), flush=True)
+                                _activated = True; break
                         except: pass
+                        try:
+                            _cf = sb.cdp.evaluate("""(function(){var f=document.querySelector('iframe[src*="hcaptcha-inner"]');if(!f)return 'no-frame';var r=f.getBoundingClientRect();return r.height>10?'visible:'+r.height:'hidden:'+r.height;})()""")
+                            print("  Captcha [" + str(_attempt+1) + "]: " + str(_cf), flush=True)
+                        except: pass
+                        try: sb.uc_gui_handle_captcha(); _t.sleep(2)
+                        except: pass
+                        try: sb.uc_gui_click_captcha(); _t.sleep(2)
+                        except: pass
+                        _t.sleep(3)
+
+                    if not _activated:
+                        # Watch URL for redirect up to 70s
+                        for _wi in range(35):
+                            _t.sleep(2)
+                            try:
+                                _cur = sb.get_current_url()
+                                if _wi % 3 == 0: print("  [" + str(_wi*2) + "s] " + _cur[:70], flush=True)
+                                if "mulerun.com" in _cur and "checkout.stripe.com" not in _cur:
+                                    print("Redirected: " + _cur[:70], flush=True)
+                                    _activated = True; break
+                            except: pass
+                        else:
+                            # Dump page state for diagnosis
+                            try:
+                                _pt = sb.cdp.evaluate("document.body.innerText.substring(0,500)")
+                                print("Page: " + str(_pt)[:200], flush=True)
+                                _iframes = sb.cdp.evaluate("""(function(){return Array.from(document.querySelectorAll('iframe')).map(function(f){return (f.src||'').substring(0,60);});})()""")
+                                print("iframes: " + str(_iframes), flush=True)
+                            except: pass
 
                     if _activated:
                         try:
