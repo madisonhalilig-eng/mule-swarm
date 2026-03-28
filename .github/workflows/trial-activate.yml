@@ -36,9 +36,9 @@ jobs:
           MULE_NAME: ${{ github.event.inputs.mule_name }}
           ACCOUNT_EMAIL: ${{ github.event.inputs.account_email }}
           ACCOUNT_PASSWORD: ${{ github.event.inputs.account_password }}
-          CARD_NUM: "4834420888062209"
-          CARD_EXP: "03/30"
-          CARD_CVV: "750"
+          CARD_NUM: "5363470087934522"
+          CARD_EXP: "01/29"
+          CARD_CVV: "565"
           CARD_NAME: "Madison Halili"
           FIREBASE_URL: https://life-os-447d0-default-rtdb.asia-southeast1.firebasedatabase.app
           TG_TOKEN: "8610087969:AAF5klMKLZmAugYwUeNnvAEU-ePkGtI-htM"
