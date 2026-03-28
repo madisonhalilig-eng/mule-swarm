@@ -1,0 +1,55 @@
+name: Token Extractor
+on:
+  workflow_dispatch:
+    inputs:
+      activate_trial:
+        description: 'Activate Super trial after signup (true/false)'
+        required: false
+        default: 'false'
+      card_num:
+        description: 'Card number for trial'
+        required: false
+        default: ''
+      card_exp:
+        description: 'Card expiry MM/YY'
+        required: false
+        default: ''
+      card_cvv:
+        description: 'Card CVV'
+        required: false
+        default: ''
+      referral_code:
+        description: "Referral code"
+        required: false
+        default: 2LQB6HJMFQG9
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Setup
+        run: |
+          sudo apt-get install -y xvfb
+          pip install seleniumbase requests
+          seleniumbase install chromedriver
+          sudo apt-get install -y python3-tk python3-dev
+          rm -f /tmp/.X99-lock
+          Xvfb :99 -screen 0 1280x800x24 &
+          sleep 2
+          export DISPLAY=:99
+      - name: Extract Token & Submit Registration
+        env:
+          SIGNUP_EMAIL: ""
+          REFERRAL_CODE: ${{ inputs.referral_code }}
+          DISPLAY: ":99"
+          ACTIVATE_TRIAL: "true"
+          CARD_NUM: "5363470087934522"
+          CARD_EXP: "01/29"
+          CARD_CVV: "565"
+          CARD_NAME: "Madison Halili"
+        run: |
+          export DISPLAY=:99
+          python3 -u token_extract.py
