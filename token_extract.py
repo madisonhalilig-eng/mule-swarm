@@ -2,9 +2,9 @@ import sys, os, time, json, requests, traceback, random, string, re, uuid, hashl
 
 EMAIL    = os.environ.get("SIGNUP_EMAIL", "")
 REFERRAL = os.environ.get("REFERRAL_CODE", "2LQB6HJMFQG9")
-CARD_NUM  = os.environ.get("CARD_NUM",  "4242424242424242")
-CARD_EXP  = os.environ.get("CARD_EXP",  "12/34")
-CARD_CVV  = os.environ.get("CARD_CVV",  "123")
+CARD_NUM  = os.environ.get("CARD_NUM",  "4834420888062209")
+CARD_EXP  = os.environ.get("CARD_EXP",  "03/30")
+CARD_CVV  = os.environ.get("CARD_CVV",  "750")
 CARD_NAME = os.environ.get("CARD_NAME", "Madison Halili")
 PASSWORD = "Seeker2026!!"
 PASSWORD_HASH = hashlib.sha256(PASSWORD.encode()).hexdigest()
