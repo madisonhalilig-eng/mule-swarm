@@ -460,8 +460,27 @@ if mule_name:
         print("JWT save error: " + str(_je), flush=True)
 
 
-# Inline trial activation already handled above (L300-394)
-# No separate dispatch needed - same fresh IP = no captcha
+# Dispatch Trial Activator for this mule (separate job = clean IP each time)
+if mule_name:
+    try:
+        import os as _os2
+        _gh_token = _os2.environ.get("GH_DISPATCH_TOKEN", "")
+        if _gh_token:
+            _ta_r = requests.post(
+                "https://api.github.com/repos/moreshiofficial-rgb/mule-swarm/actions/workflows/252592321/dispatches",
+                headers={"Authorization": "token " + _gh_token,
+                         "Accept": "application/vnd.github.v3+json"},
+                json={"ref": "main", "inputs": {
+                    "mule_name": mule_name,
+                    "account_email": EMAIL,
+                    "account_password": "Seeker2026!!"
+                }}, timeout=15)
+            print("Trial Activator dispatched: HTTP " + str(_ta_r.status_code), flush=True)
+        else:
+            print("Trial Activator: GH_DISPATCH_TOKEN not set", flush=True)
+    except Exception as _tae:
+        print("Trial Activator dispatch err: " + str(_tae)[:60], flush=True)
+
 print("Birth+trial complete for " + (mule_name or EMAIL), flush=True)
 
 
