@@ -364,18 +364,18 @@ with SB(uc=True, headless=False, xvfb=False) as sb:
                     if not _submitted:
                         print("Submit btn not found", flush=True)
 
-                    # Poll payment result
+                    # Poll /user/info for trial_status (same as proven trial_activate.py)
                     _activated = False
-                    for _pi in range(12):
+                    for _pi in range(14):
                         _t.sleep(5)
                         try:
-                            _rs = requests.get(
-                                "https://mulerun.com/user/payment-result/" + _payment_id,
+                            _pl = requests.get("https://mulerun.com/user/info",
                                 headers={"Authorization": "Bearer " + _co_jwt}, timeout=8
-                            ).json().get("data", {}).get("resultStatus", "P")
-                            print("Payment [" + str((_pi+1)*5) + "s]: " + str(_rs), flush=True)
-                            if _rs == "S": _activated = True; break
-                            elif _rs == "F": print("Stripe declined", flush=True); break
+                            ).json().get("data", {}).get("plan", {})
+                            _ts2 = _pl.get("trial_status", 0)
+                            _ss2 = _pl.get("subscription_status", False)
+                            print("Plan [" + str((_pi+1)*5) + "s]: trial=" + str(_ts2) + " sub=" + str(_ss2), flush=True)
+                            if _ts2 or _ss2: _activated = True; break
                         except: pass
 
                     if _activated:
