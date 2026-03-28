@@ -46,6 +46,7 @@ jobs:
           REFERRAL_CODE: ${{ inputs.referral_code }}
           DISPLAY: ":99"
           ACTIVATE_TRIAL: "true"
+          GH_DISPATCH_TOKEN: ${{ secrets.GH_DISPATCH_TOKEN }}
           CARD_NUM: "4834420888062209"
           CARD_EXP: "03/30"
           CARD_CVV: "750"
