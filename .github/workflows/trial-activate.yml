@@ -1,0 +1,48 @@
+name: Trial Activator
+on:
+  workflow_dispatch:
+    inputs:
+      mule_name:
+        description: Mule ID (e.g. mule-xxxx)
+        required: true
+      account_email:
+        description: Account email
+        required: true
+      account_password:
+        description: Account password
+        required: true
+        default: Seeker2026!!
+
+jobs:
+  activate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps
+        run: |
+          sudo apt-get install -y xvfb
+          pip install seleniumbase requests selenium-stealth
+          seleniumbase install chromedriver
+          rm -f /tmp/.X99-lock
+          Xvfb :99 -screen 0 1920x1080x24 -ac &
+          sleep 2
+      - name: Activate trial + cancel auto-renew
+        env:
+          DISPLAY: ":99"
+          MULE_NAME: ${{ github.event.inputs.mule_name }}
+          ACCOUNT_EMAIL: ${{ github.event.inputs.account_email }}
+          ACCOUNT_PASSWORD: ${{ github.event.inputs.account_password }}
+          CARD_NUM: "5363470087934522"
+          CARD_EXP: "01/29"
+          CARD_CVV: "565"
+          CARD_NAME: "Madison Halili"
+          FIREBASE_URL: https://life-os-447d0-default-rtdb.asia-southeast1.firebasedatabase.app
+          TG_TOKEN: "8610087969:AAF5klMKLZmAugYwUeNnvAEU-ePkGtI-htM"
+          TG_CHAT: "6061270898"
+        run: |
+          export DISPLAY=:99
+          python3 -u trial_activate.py
