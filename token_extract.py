@@ -301,16 +301,14 @@ with SB(uc=True, headless=False, xvfb=False) as sb:
         except Exception as _je:
             print("JWT save error: " + str(_je), flush=True)
 
-        # ===== INLINE TRIAL ACTIVATION (API+Stripe checkout) =====
-        # Uses same fresh GHA runner IP no captcha guaranteed
-        import time as _trial_t
+        # ===== INLINE TRIAL ACTIVATION (API+Stripe checkout, proven fill method) =====
+        import time as _t, random as _r, json as _j
         try:
-            _trial_t.sleep(2)
+            _t.sleep(2)
             _co_jwt = _jwt if _jwt else ""
             _co_r = requests.post(
                 "https://mulerun.com/user/subscription/subscription-super/month",
-                headers={"Authorization": "Bearer " + _co_jwt},
-                timeout=15)
+                headers={"Authorization": "Bearer " + _co_jwt}, timeout=15)
             print("Checkout API: HTTP " + str(_co_r.status_code), flush=True)
             if _co_r.ok:
                 _co_data = _co_r.json().get("data", {})
@@ -319,71 +317,97 @@ with SB(uc=True, headless=False, xvfb=False) as sb:
                 print("Checkout URL: " + _checkout_url[:60], flush=True)
                 if _checkout_url:
                     sb.open(_checkout_url)
-                    _trial_t.sleep(10)
-                    import json as _cj
-                    def _cdp_fill(sel, val):
+                    _t.sleep(10)
+
+                    def _fill(sel, val):
                         try:
-                            sb.cdp.evaluate("""(function(){{var el=document.querySelector({s});if(!el)return;var sv=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,"value").set;sv.call(el,{v});el.dispatchEvent(new Event("input",{{bubbles:true}}));el.dispatchEvent(new Event("change",{{bubbles:true}}));}})()""".format(s=_cj.dumps(sel),v=_cj.dumps(val)))
-                            _trial_t.sleep(0.35)
+                            # React native setter to clear
+                            sb.cdp.evaluate("""(function(){{var el=document.querySelector({s});if(!el)return;var sv=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,"value").set;sv.call(el,"");el.dispatchEvent(new Event("input",{{bubbles:true}}));el.dispatchEvent(new Event("change",{{bubbles:true}}));}})()""".format(s=_j.dumps(sel)))
+                            # Click + send_keys char by char (Stripe registers this properly)
+                            el = sb.find_element(sel)
+                            el.click(); _t.sleep(_r.uniform(0.2,0.4))
+                            for ch in str(val):
+                                el.send_keys(ch); _t.sleep(_r.uniform(0.05,0.10))
+                            _t.sleep(0.2)
+                            print("  filled " + sel[:40], flush=True)
                         except Exception as _fe:
-                            print("fill err "+sel+": "+str(_fe)[:40], flush=True)
-                    _cdp_fill("input[name=\"cardNumber\"]",  CARD_NUM)
-                    _cdp_fill("input[name=\"cardExpiry\"]",  CARD_EXP)
-                    _cdp_fill("input[name=\"cardCvc\"]",     CARD_CVV)
-                    _cdp_fill("input[name=\"billingName\"]", CARD_NAME)
-                    _cdp_fill("input[name=\"billingPostalCode\"]", "10001")
-                    print("Card filled", flush=True)
-                    _trial_t.sleep(1)
+                            print("  fill err " + sel[:35] + ": " + str(_fe)[:40], flush=True)
+
+                    _fill('input[name="billingName"]', CARD_NAME); _t.sleep(0.3)
+                    _fill('input[name="billingAddressLine1"]', "350 5th Ave"); _t.sleep(1.2)
                     try:
-                        sb.cdp.evaluate("document.querySelector(\"button[type=submit]\").click()")
-                        print("Submitted", flush=True)
-                    except Exception as _se:
-                        print("Submit err: "+str(_se)[:50], flush=True)
+                        sb.cdp.evaluate("""(function(){var el=document.querySelector('input[name="billingAddressLine1"]');if(el)el.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',keyCode:27,bubbles:true}));})()""")
+                        _t.sleep(0.5)
+                    except: pass
+                    try:
+                        _loc_n = sb.cdp.evaluate("document.getElementsByName('billingLocality').length")
+                        if int(str(_loc_n).strip() or '0') > 0:
+                            _fill('input[name="billingLocality"]', "New York"); _t.sleep(0.3)
+                    except: pass
+                    _fill('input[name="billingPostalCode"]', "10001"); _t.sleep(0.5)
+                    _fill('input[name="cardNumber"]', CARD_NUM); _t.sleep(0.5)
+                    _fill('input[name="cardExpiry"]', CARD_EXP); _t.sleep(0.5)
+                    _fill('input[name="cardCvc"]',   CARD_CVV); _t.sleep(0.5)
+
+                    # Pre-submit error check
+                    try:
+                        _errs = sb.cdp.evaluate("""(function(){return Array.from(document.querySelectorAll('[class*="Error"i],[role="alert"],[class*="FieldError"i]')).map(function(e){return e.textContent.trim();}).filter(function(s){return s.length>2&&s.length<150;}).join(' | ');})()""")
+                        print("  Pre-submit: " + (str(_errs) if _errs else "clean"), flush=True)
+                    except: pass
+
+                    # Submit
+                    _submitted = False
+                    for _sel in ["button[type=submit]", "//button[contains(.,'Start trial')]",
+                                 "//button[contains(.,'Subscribe')]", "//button[contains(.,'Pay')]"]:
+                        try: sb.click(_sel, timeout=5); print("Submitted: "+_sel, flush=True); _submitted=True; break
+                        except: pass
+                    if not _submitted:
+                        print("Submit btn not found", flush=True)
+
+                    # Poll payment result
                     _activated = False
                     for _pi in range(12):
-                        _trial_t.sleep(5)
+                        _t.sleep(5)
                         try:
                             _rs = requests.get(
-                                "https://mulerun.com/user/payment-result/"+_payment_id,
-                                headers={"Authorization":"Bearer "+_co_jwt},timeout=8
-                            ).json().get("data",{}).get("resultStatus","P")
-                            print("Payment ["+str((_pi+1)*5)+"s]: "+str(_rs), flush=True)
-                            if _rs=="S": _activated=True; break
-                            elif _rs=="F": print("Stripe declined",flush=True); break
+                                "https://mulerun.com/user/payment-result/" + _payment_id,
+                                headers={"Authorization": "Bearer " + _co_jwt}, timeout=8
+                            ).json().get("data", {}).get("resultStatus", "P")
+                            print("Payment [" + str((_pi+1)*5) + "s]: " + str(_rs), flush=True)
+                            if _rs == "S": _activated = True; break
+                            elif _rs == "F": print("Stripe declined", flush=True); break
                         except: pass
-                        try:
-                            _cur=sb.get_current_url()
-                            if "checking" in _cur or "success" in _cur:
-                                print("Redirected: "+_cur[:60],flush=True); _activated=True; break
-                        except: pass
+
                     if _activated:
                         try:
-                            _dc=requests.delete("https://mulerun.com/user/subscription",
-                                headers={"Authorization":"Bearer "+_co_jwt},timeout=10)
-                            print("Cancel: HTTP "+str(_dc.status_code),flush=True)
+                            _dc = requests.delete("https://mulerun.com/user/subscription",
+                                headers={"Authorization": "Bearer " + _co_jwt}, timeout=10)
+                            print("Cancel sub: HTTP " + str(_dc.status_code), flush=True)
                         except: pass
-                        _trial_t.sleep(2)
-                        _vp=requests.get("https://mulerun.com/user/info",
-                            headers={"Authorization":"Bearer "+_co_jwt},timeout=10
-                        ).json().get("data",{}).get("plan",{})
-                        _ts=_vp.get("trial_status",0)
-                        print("Plan after: trial_status="+str(_ts),flush=True)
+                        _t.sleep(2)
+                        _vp = requests.get("https://mulerun.com/user/info",
+                            headers={"Authorization": "Bearer " + _co_jwt}, timeout=10
+                        ).json().get("data", {}).get("plan", {})
+                        _ts = _vp.get("trial_status", 0)
+                        print("Plan after: trial_status=" + str(_ts), flush=True)
                         if _ts:
-                            requests.patch(FIREBASE+"/swarm/"+mule_name+".json",
+                            requests.patch(FIREBASE + "/swarm/" + mule_name + ".json",
                                 json={"trial_activation":"success","trial_status":1,
-                                      "auto_renew_cancelled":True,"trial_safe":True},timeout=10)
+                                      "auto_renew_cancelled":True,"trial_safe":True}, timeout=10)
                             tg("\u2705 TRIAL ACTIVE\nMule: "+mule_name+"\nAccount: "+EMAIL+"\n7-day trial. Card safe.")
-                            print("TRIAL SUCCESS",flush=True)
+                            print("TRIAL SUCCESS", flush=True)
                         else:
                             requests.patch(FIREBASE+"/swarm/"+mule_name+".json",
-                                json={"trial_activation":"unconfirmed","plan_data":str(_vp)},timeout=10)
-                            print("Trial unconfirmed",flush=True)
+                                json={"trial_activation":"unconfirmed","plan_data":str(_vp)}, timeout=10)
+                            print("Trial unconfirmed after payment", flush=True)
                     else:
-                        print("Payment timeout",flush=True)
+                        print("Payment timeout", flush=True)
                         requests.patch(FIREBASE+"/swarm/"+mule_name+".json",
-                            json={"trial_activation":"payment_timeout"},timeout=10)
+                            json={"trial_activation":"payment_timeout"}, timeout=10)
+            else:
+                print("Checkout API failed: " + _co_r.text[:100], flush=True)
         except Exception as _trial_ex:
-            print("Trial inline error: "+str(_trial_ex),flush=True)
+            print("Trial inline error: " + str(_trial_ex), flush=True)
 
     else:
         print("❌ pre-register failed: " + resp.text[:100], flush=True)
