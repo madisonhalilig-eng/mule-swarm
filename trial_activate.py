@@ -26,32 +26,23 @@ def fb(data):
     requests.patch(f"{FIREBASE}/swarm/{MULE}.json", json=data, timeout=10)
 
 def fill(sb, sel, val):
-    """Fill using React native setter (clears properly) + send_keys for human-like input"""
-    import random, json as _json
+    """Fill using execCommand insertText — confirmed working on Stripe inputs"""
+    import json as _json
     try:
-        # First: use React native setter to clear the field properly
-        clear_code = """(function(){
-            var el = document.querySelector(SEL);
+        js = """(function(){
+            var el = document.querySelector(""" + _json.dumps(sel) + """);
             if(!el) return 'not found';
-            var s = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
-            s.call(el, '');
+            el.focus(); el.click();
+            document.execCommand('selectAll');
+            document.execCommand('delete');
+            document.execCommand('insertText', false, """ + _json.dumps(str(val)) + """);
             el.dispatchEvent(new Event('input',{bubbles:true}));
             el.dispatchEvent(new Event('change',{bubbles:true}));
-            return 'cleared';
-        })()""".replace("SEL", _json.dumps(sel))
-        sb.cdp.evaluate("(function(){" + clear_code.replace("(function(){","").replace("})()","") + "})()")
-        
-        # Then click and type character by character
-        el = sb.find_element(sel)
-        el.click(); time.sleep(random.uniform(0.2, 0.4))
-        for ch in str(val):
-            el.send_keys(ch)
-            time.sleep(random.uniform(0.05, 0.12))
-        time.sleep(0.2)
-        
-        # Verify via React native getter
-        actual = sb.cdp.evaluate(f"document.querySelector({_json.dumps(sel)})?.value")
-        print(f"  filled {sel[:40]}: {actual[:20] if actual else 'OK'}", flush=True)
+            el.blur();
+            return el.value;
+        })()"""
+        result = sb.cdp.evaluate(js)
+        print(f"  filled {sel[:40]}: {str(result)[:20]}", flush=True)
         return True
     except Exception as e:
         print(f"  fill fail {sel[:40]}: {str(e)[:60]}", flush=True)
