@@ -321,26 +321,9 @@ if mule_name:
         print("JWT save error: " + str(_je), flush=True)
 
 
-# Dispatch Trial Activator — round-robin MadisonHalili / sketch (fresh minutes)
-if mule_name:
-    try:
-        import os as _os2, time as _t2
-        _use_mad = (int(_t2.time()) % 2 == 0)
-        _ta_repo  = "MadisonHalili/mule-swarm"             if _use_mad else "madisonclydehalili-sketch/mule-swarm"
-        _ta_wf_id = "252850890"                             if _use_mad else "252850930"
-        _ta_tok   = _os2.environ.get("GH_TOKEN_MAD", "")   if _use_mad else _os2.environ.get("GH_TOKEN_SKT", "")
-        if _ta_tok:
-            _ta_r = requests.post(
-                f"https://api.github.com/repos/{_ta_repo}/actions/workflows/{_ta_wf_id}/dispatches",
-                headers={"Authorization": "token " + _ta_tok, "Accept": "application/vnd.github.v3+json"},
-                json={"ref": "main", "inputs": {
-                    "mule_name": mule_name,
-                    "account_email": EMAIL,
-                    "account_password": "Seeker2026!!"
-                }}, timeout=15)
-            print("TA dispatched to " + _ta_repo.split("/")[0] + ": HTTP " + str(_ta_r.status_code), flush=True)
-    except Exception as _tae:
-        print("TA dispatch err: " + str(_tae)[:60], flush=True)
+# Trial activation handled sequentially by watchdog (card_watchdog_v3.py on VM)
+# DO NOT dispatch Trial Activator from here — concurrent sessions trigger Stripe captcha
+print("JWT saved — watchdog will activate trial sequentially", flush=True)
 
 print("Birth+trial complete for " + (mule_name or EMAIL), flush=True)
 
