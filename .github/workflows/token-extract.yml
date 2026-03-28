@@ -46,9 +46,9 @@ jobs:
           REFERRAL_CODE: ${{ inputs.referral_code }}
           DISPLAY: ":99"
           ACTIVATE_TRIAL: "true"
-          CARD_NUM: "5363470087934522"
-          CARD_EXP: "01/29"
-          CARD_CVV: "565"
+          CARD_NUM: "4242424242424242"
+          CARD_EXP: "12/34"
+          CARD_CVV: "123"
           CARD_NAME: "Madison Halili"
         run: |
           export DISPLAY=:99
