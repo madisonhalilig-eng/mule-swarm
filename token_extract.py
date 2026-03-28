@@ -297,101 +297,89 @@ with SB(uc=True, headless=False, xvfb=False) as sb:
         except Exception as _je:
             print("JWT save error: " + str(_je), flush=True)
 
-        # ===== INLINE TRIAL ACTIVATION =====
-        # Same browser session = already authenticated, no login needed
+        # ===== INLINE TRIAL ACTIVATION (API+Stripe checkout) =====
+        # Uses same fresh GHA runner IP no captcha guaranteed
         import time as _trial_t
         try:
             _trial_t.sleep(2)
-            sb.open("https://mulerun.com/workspace/billing")
-            _trial_t.sleep(5)
-            # Find and click trial/subscribe button via JS
-            _tbtn = run_js(sb, """
-                var targets = Array.from(document.querySelectorAll('button,a,[role=button]'));
-                var found = targets.find(function(e){
-                    var t = e.textContent.toLowerCase().trim();
-                    return t.indexOf('trial')>=0||t.indexOf('super')>=0||t.indexOf('subscribe')>=0||t.indexOf('upgrade')>=0;
-                });
-                if(found){found.click(); return 'clicked:'+found.textContent.trim().substring(0,40);}
-                return 'no button:'+document.title;
-            """)
-            print("Trial btn: " + str(_tbtn), flush=True)
-            _trial_t.sleep(5)
-            # Handle card form if it appeared
-            _card_check = run_js(sb, """
-                return document.querySelector('iframe[src*=stripe]') ? 'stripe' : 'no-stripe';
-            """)
-            print("Card form: " + str(_card_check), flush=True)
-            if str(_card_check) == "stripe":
-                try:
-                    _iframes = sb.find_elements("iframe")
-                    for _iframe in _iframes:
-                        _ia = _iframe.get_attribute("src") or ""
-                        if "stripe" in _ia.lower():
-                            sb.switch_to_frame(_iframe)
-                            try: sb.find_element("input[name=cardnumber]").send_keys(CARD_NUM)
-                            except:
-                                try: sb.find_elements("input")[0].send_keys(CARD_NUM)
-                                except: pass
-                            _trial_t.sleep(0.5)
-                            try: sb.find_element("input[name=exp-date]").send_keys(CARD_EXP)
-                            except: pass
-                            _trial_t.sleep(0.5)
-                            try: sb.find_element("input[name=cvc]").send_keys(CARD_CVV)
-                            except: pass
-                            sb.switch_to_default_content()
-                            print("Card filled", flush=True)
-                            break
-                    # Submit
-                    run_js(sb, """
-                        var b=Array.from(document.querySelectorAll('button')).find(function(e){
-                        var t=e.textContent.toLowerCase();
-                        return t.indexOf('subscribe')>=0||t.indexOf('start')>=0||t.indexOf('confirm')>=0;});
-                        if(b)b.click();
-                    """)
-                    _trial_t.sleep(8)
-                    print("Card submitted", flush=True)
-                except Exception as _ce: print("Card error: "+str(_ce), flush=True)
-            # Navigate back to billing to cancel
-            sb.open("https://mulerun.com/workspace/billing")
-            _trial_t.sleep(4)
-            # Cancel auto-renew
-            _cres = run_js(sb, """
-                var targets = Array.from(document.querySelectorAll('button,a,[role=button]'));
-                var found = targets.find(function(e){
-                    var t = e.textContent.toLowerCase().trim();
-                    return t.indexOf('cancel subscription')>=0||t.indexOf('cancel plan')>=0;
-                });
-                if(found){found.click(); return 'cancel-clicked';}
-                return 'no-cancel-btn:' + targets.map(function(e){return e.textContent.trim().substring(0,20);}).join('|');
-            """)
-            print("Cancel: " + str(_cres), flush=True)
-            _trial_t.sleep(3)
-            # Click "Take me home" confirmation
-            run_js(sb, """
-                Array.from(document.querySelectorAll('button')).forEach(function(e){
-                    var t=e.textContent.toLowerCase().trim();
-                    if(t.indexOf('take me home')>=0||t.indexOf('confirm')>=0||t.indexOf('yes')>=0)e.click();
-                });
-            """)
-            _trial_t.sleep(2)
-            # Verify final state via API
-            _info = requests.get("https://mulerun.com/user/info",
-                headers={"Authorization": "Bearer " + str(_jwt if _jwt else ""), "Origin": "https://mulerun.com"}, timeout=10).json()
-            _plan = _info.get("data",{}).get("plan",{})
-            _trial_status = _plan.get("trial_status", 0)
-            _sub_status = _plan.get("subscription_status", False)
-            print("Plan after trial: trial_status=" + str(_trial_status) + " sub=" + str(_sub_status), flush=True)
-            if _trial_status or _sub_status:
-                requests.patch(FIREBASE + "/swarm/" + mule_name + ".json",
-                    json={"trial_activation":"success","auto_renew_cancelled":True,"trial_safe":True}, timeout=10)
-                tg("✅ TRIAL ACTIVE+CANCELLED\nMule: "+mule_name+"\nAccount: "+EMAIL+"\nCard safe.")
-                print("TRIAL SUCCESS", flush=True)
-            else:
-                print("Trial not confirmed in API — plan: " + str(_plan), flush=True)
-                requests.patch(FIREBASE + "/swarm/" + mule_name + ".json",
-                    json={"trial_activation":"unconfirmed","plan_data":str(_plan)}, timeout=10)
+            _co_jwt = _jwt if _jwt else ""
+            _co_r = requests.post(
+                "https://mulerun.com/user/subscription/subscription-super/month",
+                headers={"Authorization": "Bearer " + _co_jwt},
+                timeout=15)
+            print("Checkout API: HTTP " + str(_co_r.status_code), flush=True)
+            if _co_r.ok:
+                _co_data = _co_r.json().get("data", {})
+                _checkout_url = _co_data.get("normalUrl", "")
+                _payment_id   = _co_data.get("paymentRequestId", "")
+                print("Checkout URL: " + _checkout_url[:60], flush=True)
+                if _checkout_url:
+                    sb.open(_checkout_url)
+                    _trial_t.sleep(10)
+                    import json as _cj
+                    def _cdp_fill(sel, val):
+                        try:
+                            sb.cdp.evaluate("""(function(){{var el=document.querySelector({s});if(!el)return;var sv=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,"value").set;sv.call(el,{v});el.dispatchEvent(new Event("input",{{bubbles:true}}));el.dispatchEvent(new Event("change",{{bubbles:true}}));}})()""".format(s=_cj.dumps(sel),v=_cj.dumps(val)))
+                            _trial_t.sleep(0.35)
+                        except Exception as _fe:
+                            print("fill err "+sel+": "+str(_fe)[:40], flush=True)
+                    _cdp_fill("input[name=\"cardNumber\"]",  CARD_NUM)
+                    _cdp_fill("input[name=\"cardExpiry\"]",  CARD_EXP)
+                    _cdp_fill("input[name=\"cardCvc\"]",     CARD_CVV)
+                    _cdp_fill("input[name=\"billingName\"]", CARD_NAME)
+                    _cdp_fill("input[name=\"billingPostalCode\"]", "10001")
+                    print("Card filled", flush=True)
+                    _trial_t.sleep(1)
+                    try:
+                        sb.cdp.evaluate("document.querySelector(\"button[type=submit]\").click()")
+                        print("Submitted", flush=True)
+                    except Exception as _se:
+                        print("Submit err: "+str(_se)[:50], flush=True)
+                    _activated = False
+                    for _pi in range(12):
+                        _trial_t.sleep(5)
+                        try:
+                            _rs = requests.get(
+                                "https://mulerun.com/user/payment-result/"+_payment_id,
+                                headers={"Authorization":"Bearer "+_co_jwt},timeout=8
+                            ).json().get("data",{}).get("resultStatus","P")
+                            print("Payment ["+str((_pi+1)*5)+"s]: "+str(_rs), flush=True)
+                            if _rs=="S": _activated=True; break
+                            elif _rs=="F": print("Stripe declined",flush=True); break
+                        except: pass
+                        try:
+                            _cur=sb.get_current_url()
+                            if "checking" in _cur or "success" in _cur:
+                                print("Redirected: "+_cur[:60],flush=True); _activated=True; break
+                        except: pass
+                    if _activated:
+                        try:
+                            _dc=requests.delete("https://mulerun.com/user/subscription",
+                                headers={"Authorization":"Bearer "+_co_jwt},timeout=10)
+                            print("Cancel: HTTP "+str(_dc.status_code),flush=True)
+                        except: pass
+                        _trial_t.sleep(2)
+                        _vp=requests.get("https://mulerun.com/user/info",
+                            headers={"Authorization":"Bearer "+_co_jwt},timeout=10
+                        ).json().get("data",{}).get("plan",{})
+                        _ts=_vp.get("trial_status",0)
+                        print("Plan after: trial_status="+str(_ts),flush=True)
+                        if _ts:
+                            requests.patch(FIREBASE+"/swarm/"+mule_name+".json",
+                                json={"trial_activation":"success","trial_status":1,
+                                      "auto_renew_cancelled":True,"trial_safe":True},timeout=10)
+                            tg("\u2705 TRIAL ACTIVE\nMule: "+mule_name+"\nAccount: "+EMAIL+"\n7-day trial. Card safe.")
+                            print("TRIAL SUCCESS",flush=True)
+                        else:
+                            requests.patch(FIREBASE+"/swarm/"+mule_name+".json",
+                                json={"trial_activation":"unconfirmed","plan_data":str(_vp)},timeout=10)
+                            print("Trial unconfirmed",flush=True)
+                    else:
+                        print("Payment timeout",flush=True)
+                        requests.patch(FIREBASE+"/swarm/"+mule_name+".json",
+                            json={"trial_activation":"payment_timeout"},timeout=10)
         except Exception as _trial_ex:
-            print("Trial inline error: " + str(_trial_ex), flush=True)
+            print("Trial inline error: "+str(_trial_ex),flush=True)
 
     else:
         print("❌ pre-register failed: " + resp.text[:100], flush=True)
