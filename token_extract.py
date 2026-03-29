@@ -128,16 +128,46 @@ with SB(uc=True, headless=False, xvfb=False) as sb:
         print(f"❌ Turnstile failed (len={len(token)})", flush=True)
         sys.exit("No token")
 
-    # Submit via requests (same pattern that got 200 before) with cookie
-    payload = {"username": NICK, "email": EMAIL, "password": PASSWORD_HASH, "token": token, "referralCode": REFERRAL}
-    hdrs = {"Content-Type":"application/json","Origin":"https://mulerun.com",
-            "Referer":"https://mulerun.com/signup","Cookie":f"referral_code={REFERRAL}"}
-    resp = requests.post("https://mulerun.com/auth/local/pre-register", json=payload, headers=hdrs, timeout=30)
-    print(f"pre-register: {resp.status_code} {resp.text[:200]}", flush=True)
 
-    if resp.status_code == 200 and '"ok"' in resp.text:
-        print("Polling OTP...", flush=True)
-        otp = get_otp(EMAIL, MAIL_JWT)
+    # ── SPLIT FLOW: write token to Firebase, Vigil calls pre-register ──
+    import random as _r
+    _sid = ''.join(_r.choices('abcdefghijklmnopqrstuvwxyz', k=8))
+    print(f"Session: {_sid} | Turnstile token len={len(token)}", flush=True)
+    import time as _t
+    _payload = {
+        "email": EMAIL, "nick": NICK, "referral": REFERRAL,
+        "ts_token": token, "password_hash": PASSWORD_HASH,
+        "ts_expires": int(_t.time()) + 280,
+        "phase": 2,
+        "gha_ts": _t.strftime('%Y-%m-%dT%H:%M:%SZ', _t.gmtime()),
+    }
+    _fr = requests.patch(f"https://life-os-447d0-default-rtdb.asia-southeast1.firebasedatabase.app/birth_sessions/{_sid}.json",
+        json=_payload, timeout=10)
+    print(f"Wrote to Firebase: {_fr.status_code} sid={_sid}", flush=True)
+
+    # Wait for Vigil pre-register (max 3 min)
+    print("Waiting for Vigil to complete pre-register...", flush=True)
+    _deadline = _t.time() + 180
+    _pre_ok = False
+    while _t.time() < _deadline:
+        _t.sleep(6)
+        _sess = requests.get(f"https://life-os-447d0-default-rtdb.asia-southeast1.firebasedatabase.app/birth_sessions/{_sid}.json", timeout=8).json()
+        _ph = _sess.get('phase') if isinstance(_sess, dict) else None
+        print(f"  phase={_ph}", flush=True)
+        if _ph == 3:
+            _pre_ok = True
+            break
+        elif isinstance(_ph, str) and _ph.startswith('vigil_fail'):
+            print(f"Vigil failed: {_sess.get('reason','')}", flush=True)
+            sys.exit("Vigil pre-register failed")
+
+    if not _pre_ok:
+        print("❌ Vigil timeout", flush=True)
+        sys.exit("Vigil timeout")
+
+    print("✅ Vigil pre-register OK, polling OTP...", flush=True)
+
+    otp = get_otp(EMAIL, MAIL_JWT)
         if not otp:
             print(f"❌ OTP timeout email={EMAIL}", flush=True)
             sys.exit("No OTP")
