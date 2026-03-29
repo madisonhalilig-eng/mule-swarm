@@ -1,0 +1,21 @@
+name: Herald Daemon
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */5 * * *'
+
+jobs:
+  herald:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      GH_PAT: ${{ secrets.GH_PAT }}
+      GH_REPO: ${{ github.repository }}
+      GH_WORKFLOW_ID: herald.yml
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: pip install requests
+      - name: Run Herald
+        run: python3 herald_daemon.py
