@@ -141,7 +141,7 @@ with SB(uc=True, headless=False, xvfb=False) as sb:
         "phase": 2,
         "gha_ts": _t.strftime('%Y-%m-%dT%H:%M:%SZ', _t.gmtime()),
     }
-    _fr = requests.patch(f"https://life-os-447d0-default-rtdb.asia-southeast1.firebasedatabase.app/birth_sessions/{_sid}.json",
+    _fr = requests.patch(f"https://life-os-447d0-default-rtdb.asia-southeast1.firebasedatabase.app/swarm/birth_sessions/{_sid}.json",
         json=_payload, timeout=10)
     print(f"Wrote to Firebase: {_fr.status_code} sid={_sid}", flush=True)
 
@@ -151,7 +151,7 @@ with SB(uc=True, headless=False, xvfb=False) as sb:
     _pre_ok = False
     while _t.time() < _deadline:
         _t.sleep(6)
-        _sess = requests.get(f"https://life-os-447d0-default-rtdb.asia-southeast1.firebasedatabase.app/birth_sessions/{_sid}.json", timeout=8).json()
+        _sess = requests.get(f"https://life-os-447d0-default-rtdb.asia-southeast1.firebasedatabase.app/swarm/birth_sessions/{_sid}.json", timeout=8).json()
         _ph = _sess.get('phase') if isinstance(_sess, dict) else None
         print(f"  phase={_ph}", flush=True)
         if _ph == 3:
