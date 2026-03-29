@@ -304,6 +304,7 @@ with SB(uc=True, headless=False, xvfb=False) as sb:
         # Trial handled by separate Trial Activator workflow (clean IP per job)
 # SAVE JWT TO FIREBASE — enables trial activator to work without re-login
 # ============================================================
+mule_name = mule_name if "mule_name" in dir() else None  # guard
 if mule_name:
     import time as _jwt_time
     try:
