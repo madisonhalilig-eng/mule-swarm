@@ -168,9 +168,9 @@ with SB(uc=True, headless=False, xvfb=False) as sb:
     print("✅ Vigil pre-register OK, polling OTP...", flush=True)
 
     otp = get_otp(EMAIL, MAIL_JWT)
-        if not otp:
-            print(f"❌ OTP timeout email={EMAIL}", flush=True)
-            sys.exit("No OTP")
+    if not otp:
+        print(f"❌ OTP timeout email={EMAIL}", flush=True)
+        sys.exit("No OTP")
 
         # Register AND process-pending-signup via BROWSER XHR
         # This way browser gets Set-Cookie session from /register,
